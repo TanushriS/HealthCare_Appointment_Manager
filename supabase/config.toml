@@ -1,0 +1,17 @@
+# Supabase Project Configuration
+
+project_id = "medicare-connect"
+
+[api]
+port = 54321
+schemas = ["public"]
+
+[db]
+port = 54322
+
+[studio]
+port = 54323
+
+[auth]
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173/oauth/callback"]
