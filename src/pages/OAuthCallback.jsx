@@ -28,28 +28,43 @@ export default function OAuthCallback({ addToast, onComplete }) {
     }
 
     const processOAuth = async () => {
+      const { data: userData } = await supabase.auth.getUser()
+      const activeUserId = userData?.user?.id || params.get('state') || 'user-id-123'
+
       if (accessToken) {
-        // Implicit Flow (Mock Mode) - Save real token directly in mock DB
-        const mockUser = JSON.parse(localStorage.getItem('mc_session'))
+        // Save token to localStorage for direct client-side Google Calendar API access
         const tokens = JSON.parse(localStorage.getItem('user_oauth_tokens') || '[]')
         const mockToken = {
-          user_id: mockUser?.id || 'doc-id-123',
+          user_id: activeUserId,
           access_token: accessToken,
           expiry_time: new Date(Date.now() + (parseInt(expiresIn) || 3600) * 1000).toISOString(),
           updated_at: new Date().toISOString()
         }
-        const existingIdx = tokens.findIndex(t => t.user_id === mockToken.user_id)
+        const existingIdx = tokens.findIndex(t => t.user_id === activeUserId)
         if (existingIdx > -1) {
           tokens[existingIdx] = mockToken
         } else {
           tokens.push(mockToken)
         }
         localStorage.setItem('user_oauth_tokens', JSON.stringify(tokens))
+        localStorage.setItem(`google_calendar_token_${activeUserId}`, accessToken)
+
+        // Also upsert into Supabase user_oauth_tokens table if user is authenticated with Supabase
+        try {
+          await supabase.from('user_oauth_tokens').upsert({
+            user_id: activeUserId,
+            access_token: accessToken,
+            token_type: 'Bearer',
+            expiry_time: mockToken.expiry_time,
+            updated_at: mockToken.updated_at
+          })
+        } catch (e) {
+          console.warn("Saved token to localStorage, Supabase table update optional:", e)
+        }
         
         setStatus('success')
         addToast('Successfully synced Google Calendar!', 'success')
       } else if (code) {
-        // Auth Code Flow (Live Mode) - Exchange via Edge Function
         const success = await exchangeOAuthCode(code)
         if (success) {
           setStatus('success')

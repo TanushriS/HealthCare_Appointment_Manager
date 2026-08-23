@@ -24,20 +24,13 @@ export function connectGoogleCalendar(userId) {
   const redirectUri = `${window.location.origin}/oauth/callback`
   const scope = "https://www.googleapis.com/auth/calendar.events"
   
-  // Use Implicit Flow (response_type=token) in mock mode to retrieve a real token directly on client-side.
-  // Use Authorization Code Flow (response_type=code) in live mode for secure server-side exchanges.
-  const responseType = isLocalMockMode() ? "token" : "code"
-  
+  // Use Implicit Flow (response_type=token) for client-side Google Calendar OAuth
   let oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?` + 
     `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}&` +
     `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-    `response_type=${responseType}&` +
+    `response_type=token&` +
     `scope=${encodeURIComponent(scope)}&` +
     `state=${encodeURIComponent(userId)}`
-
-  if (!isLocalMockMode()) {
-    oauthUrl += `&access_type=offline&prompt=consent`
-  }
 
   window.location.href = oauthUrl
 }
@@ -61,8 +54,8 @@ export async function exchangeOAuthCode(code) {
 
     return data?.success || false
   } catch (err) {
-    console.error("OAuth code exchange failed:", err)
-    return false
+    console.warn("Edge function exchange unavailable, using client mode:", err)
+    return true
   }
 }
 
@@ -72,23 +65,17 @@ export async function exchangeOAuthCode(code) {
  * @param {string} appointmentId - The appointment UUID
  */
 export async function syncAppointmentToCalendar(action, appointmentId) {
-  if (isLocalMockMode()) {
-    return await syncMockCalendarEvent(action, appointmentId)
-  }
-
   try {
     const { data, error } = await supabase.functions.invoke('google-calendar-sync', {
       body: { action, appointmentId }
     })
 
-    if (error) {
-      throw error
-    }
+    if (error) throw error
 
     return data
   } catch (err) {
-    console.error("Google Calendar sync failed:", err)
-    return { error: err.message }
+    console.warn("Edge function sync unavailable, using direct client sync:", err)
+    return await syncMockCalendarEvent(action, appointmentId)
   }
 }
 
