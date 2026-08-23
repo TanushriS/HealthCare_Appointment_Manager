@@ -62,13 +62,34 @@ export default function App() {
 
   const fetchProfile = async (userId) => {
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single()
+        .maybeSingle()
 
       if (error) throw error
+
+      // If profile does not exist yet (e.g. user created before schema trigger existed), auto-create it
+      if (!data) {
+        const { data: userData } = await supabase.auth.getUser()
+        const userObj = userData?.user
+        const newProfile = {
+          id: userId,
+          email: userObj?.email || '',
+          name: userObj?.user_metadata?.name || userObj?.email?.split('@')[0] || 'User',
+          role: userObj?.user_metadata?.role || 'patient'
+        }
+
+        const { data: createdProfile, error: createErr } = await supabase
+          .from('profiles')
+          .upsert(newProfile)
+          .select()
+          .single()
+
+        if (createErr) throw createErr
+        data = createdProfile
+      }
 
       setProfile(data)
       if (window.location.pathname !== '/oauth/callback') {
