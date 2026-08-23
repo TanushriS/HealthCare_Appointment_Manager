@@ -13,11 +13,22 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 -- Enable RLS on profiles
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
+-- Grants for public schema tables
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
 -- Profiles Policies
 CREATE POLICY "Allow public read access to profiles" 
   ON public.profiles FOR SELECT 
-  TO authenticated 
+  TO public 
   USING (true);
+
+CREATE POLICY "Allow users to insert own profile" 
+  ON public.profiles FOR INSERT 
+  TO public 
+  WITH CHECK (true);
 
 CREATE POLICY "Allow users to update own profile" 
   ON public.profiles FOR UPDATE 
