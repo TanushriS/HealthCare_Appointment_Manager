@@ -177,18 +177,23 @@ export default function AdminDashboard({ addToast }) {
           if (error || !data?.success) throw error || new Error(data?.error)
         } catch (efErr) {
           console.warn("Edge function manage-doctors unavailable, using direct DB creation:", efErr.message)
-          let newDocId = crypto.randomUUID()
-          try {
-            const signUpRes = await supabase.auth.signUp({
-              email: docEmail,
-              password: docPassword || 'DoctorPass123!',
-              options: { data: { name: docName, role: 'doctor' } }
-            })
-            if (signUpRes.data?.user?.id) {
-              newDocId = signUpRes.data.user.id
+          let newDocId = null
+          const signUpRes = await supabase.auth.signUp({
+            email: docEmail,
+            password: docPassword || 'DoctorPass123!',
+            options: { data: { name: docName, role: 'doctor' } }
+          })
+
+          if (signUpRes.data?.user?.id) {
+            newDocId = signUpRes.data.user.id
+          } else {
+            // If signup returned error or user already exists, check existing profiles
+            const { data: existingProf } = await supabase.from('profiles').select('id').eq('email', docEmail).maybeSingle()
+            if (existingProf?.id) {
+              newDocId = existingProf.id
+            } else {
+              throw new Error(signUpRes.error?.message || "Failed to create authentication user for doctor")
             }
-          } catch (signUpErr) {
-            console.warn("Auth signup fallback:", signUpErr.message)
           }
 
           const { error: pErr } = await supabase.from('profiles').upsert({
