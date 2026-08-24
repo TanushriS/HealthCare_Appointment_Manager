@@ -153,10 +153,15 @@ export default function App() {
   }
 
   // Render Auth screens
-  if (!user || screen === 'login' || screen === 'register') {
+  if (!user || !profile || screen === 'login' || screen === 'register') {
     return (
       <>
-        {screen === 'login' ? (
+        {screen === 'register' ? (
+          <Register 
+            addToast={addToast}
+            navigateToLogin={() => setScreen('login')}
+          />
+        ) : (
           <Login 
             onLoginSuccess={(usr) => {
               setUser(usr)
@@ -164,11 +169,6 @@ export default function App() {
             }}
             addToast={addToast}
             navigateToRegister={() => setScreen('register')}
-          />
-        ) : (
-          <Register 
-            addToast={addToast}
-            navigateToLogin={() => setScreen('login')}
           />
         )}
         <Toast toasts={toasts} onDismiss={dismissToast} />
@@ -188,14 +188,14 @@ export default function App() {
       />
 
       <main style={{ flex: 1, overflowY: 'auto', height: '100vh' }}>
-        {profile.role === 'admin' && (
+        {profile?.role === 'admin' && (
           <AdminDashboard 
             addToast={addToast} 
             activeTab={activeTab} 
           />
         )}
         
-        {profile.role === 'doctor' && (
+        {profile?.role === 'doctor' && (
           <DoctorDashboard 
             user={user} 
             addToast={addToast} 
@@ -203,7 +203,7 @@ export default function App() {
           />
         )}
         
-        {profile.role === 'patient' && (
+        {profile?.role === 'patient' && (
           <PatientDashboard 
             user={user} 
             addToast={addToast} 
