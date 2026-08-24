@@ -29,54 +29,57 @@ export default function OAuthCallback({ addToast, onComplete }) {
     }
 
     const processOAuth = async () => {
-      const { data: userData } = await supabase.auth.getUser()
-      const activeUserId = userData?.user?.id || hashParams.get('state') || params.get('state') || 'user-id-123'
+      try {
+        const { data: userData } = await supabase.auth.getUser()
+        const activeUserId = userData?.user?.id || hashParams.get('state') || params.get('state') || 'user-id-123'
 
-      if (accessToken) {
-        // Save token to localStorage for direct client-side Google Calendar API access
-        const tokens = JSON.parse(localStorage.getItem('user_oauth_tokens') || '[]')
-        const mockToken = {
-          user_id: activeUserId,
-          access_token: accessToken,
-          expiry_time: new Date(Date.now() + (parseInt(expiresIn) || 3600) * 1000).toISOString(),
-          updated_at: new Date().toISOString()
-        }
-        const existingIdx = tokens.findIndex(t => t.user_id === activeUserId)
-        if (existingIdx > -1) {
-          tokens[existingIdx] = mockToken
-        } else {
-          tokens.push(mockToken)
-        }
-        localStorage.setItem('user_oauth_tokens', JSON.stringify(tokens))
-        localStorage.setItem(`google_calendar_token_${activeUserId}`, accessToken)
-
-        // Also upsert into Supabase user_oauth_tokens table if user is authenticated with Supabase
-        try {
-          await supabase.from('user_oauth_tokens').upsert({
+        if (accessToken) {
+          // Save token to localStorage for direct client-side Google Calendar API access
+          const tokens = JSON.parse(localStorage.getItem('user_oauth_tokens') || '[]')
+          const mockToken = {
             user_id: activeUserId,
             access_token: accessToken,
-            token_type: 'Bearer',
+            expiry_time: new Date(Date.now() + (parseInt(expiresIn) || 3600) * 1000).toISOString(),
+            updated_at: new Date().toISOString()
+          }
+          const existingIdx = tokens.findIndex(t => t.user_id === activeUserId)
+          if (existingIdx > -1) {
+            tokens[existingIdx] = mockToken
+          } else {
+            tokens.push(mockToken)
+          }
+          localStorage.setItem('user_oauth_tokens', JSON.stringify(tokens))
+          localStorage.setItem(`google_calendar_token_${activeUserId}`, accessToken)
+
+          // Also upsert into Supabase user_oauth_tokens table if user is authenticated with Supabase
+          const { error: upsertErr } = await supabase.from('user_oauth_tokens').upsert({
+            user_id: activeUserId,
+            access_token: accessToken,
             expiry_time: mockToken.expiry_time,
             updated_at: mockToken.updated_at
           })
-        } catch (e) {
-          console.warn("Saved token to localStorage, Supabase table update optional:", e)
-        }
-        
-        setStatus('success')
-        addToast('Successfully synced Google Calendar!', 'success')
-      } else if (code) {
-        const success = await exchangeOAuthCode(code)
-        if (success) {
+          
+          if (upsertErr) throw upsertErr
+          
           setStatus('success')
           addToast('Successfully synced Google Calendar!', 'success')
+        } else if (code) {
+          const success = await exchangeOAuthCode(code)
+          if (success) {
+            setStatus('success')
+            addToast('Successfully synced Google Calendar!', 'success')
+          } else {
+            setStatus('failed')
+            addToast('Failed to exchange Google Calendar tokens.', 'error')
+          }
         } else {
           setStatus('failed')
-          addToast('Failed to exchange Google Calendar tokens.', 'error')
+          addToast('No authorization credentials found in redirect URL', 'error')
         }
-      } else {
+      } catch (err) {
+        console.error("Google OAuth token exchange error:", err)
         setStatus('failed')
-        addToast('No authorization credentials found in redirect URL', 'error')
+        addToast(err.message || 'Failed to exchange Google Calendar tokens.', 'error')
       }
       setTimeout(() => onComplete(), 2000)
     }
