@@ -30,7 +30,7 @@ export default function OAuthCallback({ addToast, onComplete }) {
 
     const processOAuth = async () => {
       const { data: userData } = await supabase.auth.getUser()
-      const activeUserId = userData?.user?.id || params.get('state') || 'user-id-123'
+      const activeUserId = userData?.user?.id || hashParams.get('state') || params.get('state') || 'user-id-123'
 
       if (accessToken) {
         // Save token to localStorage for direct client-side Google Calendar API access
