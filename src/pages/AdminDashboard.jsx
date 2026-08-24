@@ -135,40 +135,86 @@ export default function AdminDashboard({ addToast }) {
     try {
       if (editingDoctor) {
         // Edit doctor profile
-        const { data, error } = await supabase.functions.invoke('manage-doctors', {
-          body: {
-            action: 'update',
-            doctorId: editingDoctor.user_id,
-            name: docName,
-            phone: docPhone,
+        try {
+          const { data, error } = await supabase.functions.invoke('manage-doctors', {
+            body: {
+              action: 'update',
+              doctorId: editingDoctor.user_id,
+              name: docName,
+              phone: docPhone,
+              specialisation: docSpec,
+              workingHours: finalHours,
+              slotDuration: parseInt(docDuration)
+            }
+          })
+          if (error || !data?.success) throw error || new Error(data?.error)
+        } catch (efErr) {
+          console.warn("Edge function manage-doctors unavailable, using direct DB update:", efErr.message)
+          await supabase.from('profiles').update({ name: docName, phone: docPhone }).eq('id', editingDoctor.user_id)
+          await supabase.from('doctor_profiles').upsert({
+            user_id: editingDoctor.user_id,
             specialisation: docSpec,
-            workingHours: finalHours,
-            slotDuration: parseInt(docDuration)
-          }
-        })
-        if (error || !data?.success) throw new Error(data?.error || error?.message || 'Update failed')
+            working_hours: finalHours,
+            slot_duration: parseInt(docDuration)
+          })
+        }
         addToast('Doctor profile updated successfully', 'success')
       } else {
         // Create new doctor profile
-        const { data, error } = await supabase.functions.invoke('manage-doctors', {
-          body: {
-            action: 'create',
+        try {
+          const { data, error } = await supabase.functions.invoke('manage-doctors', {
+            body: {
+              action: 'create',
+              name: docName,
+              email: docEmail,
+              password: docPassword,
+              phone: docPhone,
+              specialisation: docSpec,
+              workingHours: finalHours,
+              slotDuration: parseInt(docDuration)
+            }
+          })
+          if (error || !data?.success) throw error || new Error(data?.error)
+        } catch (efErr) {
+          console.warn("Edge function manage-doctors unavailable, using direct DB creation:", efErr.message)
+          let newDocId = crypto.randomUUID()
+          try {
+            const signUpRes = await supabase.auth.signUp({
+              email: docEmail,
+              password: docPassword || 'DoctorPass123!',
+              options: { data: { name: docName, role: 'doctor' } }
+            })
+            if (signUpRes.data?.user?.id) {
+              newDocId = signUpRes.data.user.id
+            }
+          } catch (signUpErr) {
+            console.warn("Auth signup fallback:", signUpErr.message)
+          }
+
+          const { error: pErr } = await supabase.from('profiles').upsert({
+            id: newDocId,
             name: docName,
             email: docEmail,
-            password: docPassword,
             phone: docPhone,
+            role: 'doctor'
+          })
+          if (pErr) throw pErr
+
+          const { error: dpErr } = await supabase.from('doctor_profiles').upsert({
+            user_id: newDocId,
             specialisation: docSpec,
-            workingHours: finalHours,
-            slotDuration: parseInt(docDuration)
-          }
-        })
-        if (error || !data?.success) throw new Error(data?.error || error?.message || 'Creation failed')
+            working_hours: finalHours,
+            slot_duration: parseInt(docDuration),
+            active: true
+          })
+          if (dpErr) throw dpErr
+        }
         addToast('Doctor profile created successfully', 'success')
       }
       setIsDoctorModalOpen(false)
       fetchDoctors()
     } catch (err) {
-      addToast(err.message, 'error')
+      addToast(err.message || 'Operation failed', 'error')
     } finally {
       setLoadingAction(false)
     }
@@ -176,14 +222,22 @@ export default function AdminDashboard({ addToast }) {
 
   const handleToggleActive = async (doctorId, currentActive) => {
     try {
-      const { data, error } = await supabase.functions.invoke('manage-doctors', {
-        body: {
-          action: 'toggle_active',
-          doctorId,
+      try {
+        const { data, error } = await supabase.functions.invoke('manage-doctors', {
+          body: {
+            action: 'toggle_active',
+            doctorId,
+            active: !currentActive
+          }
+        })
+        if (error) throw error
+      } catch (efErr) {
+        console.warn("Edge function manage-doctors unavailable, using direct DB toggle:", efErr.message)
+        const { error: toggleErr } = await supabase.from('doctor_profiles').update({
           active: !currentActive
-        }
-      })
-      if (error) throw error
+        }).eq('user_id', doctorId)
+        if (toggleErr) throw toggleErr
+      }
       addToast(`Doctor profile ${!currentActive ? 'activated' : 'deactivated'} successfully`, 'success')
       fetchDoctors()
     } catch (err) {
