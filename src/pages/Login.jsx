@@ -10,16 +10,6 @@ export default function Login({ onLoginSuccess, addToast, navigateToRegister }) 
   // Quick fill helper for roles
   const handleTabChange = (role) => {
     setSelectedTab(role)
-    if (role === 'patient') {
-      setEmail('patient@example.com')
-      setPassword('patient123')
-    } else if (role === 'doctor') {
-      setEmail('doctor@example.com')
-      setPassword('doctor123')
-    } else if (role === 'admin') {
-      setEmail('admin@example.com')
-      setPassword('admin123')
-    }
   }
 
   const handleSubmit = async (e) => {
@@ -31,42 +21,21 @@ export default function Login({ onLoginSuccess, addToast, navigateToRegister }) 
 
     setLoading(true)
     try {
-      let { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       })
 
-      // Auto-provision demo/admin accounts if they don't exist in Supabase Auth yet
-      if (error && (error.message?.includes('Invalid login credentials') || error.status === 400)) {
-        console.log("Account not found in Supabase Auth. Auto-provisioning demo account...")
-        const defaultName = selectedTab === 'admin' ? 'System Admin' : (selectedTab === 'doctor' ? 'Dr. Elizabeth Blackwell' : 'Patient User')
-        const signUpRes = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              name: defaultName,
-              role: selectedTab
-            }
-          }
-        })
-        
-        if (signUpRes.data?.user) {
-          // Also insert/update profile with the proper role
-          await supabase.from('profiles').upsert({
-            id: signUpRes.data.user.id,
-            email: email,
-            name: defaultName,
-            role: selectedTab
-          })
+      if (error) throw error
 
-          data = signUpRes.data
-          error = null
-        } else if (signUpRes.error) {
-          throw signUpRes.error
-        }
-      } else if (error) {
-        throw error
+      if (data?.user) {
+        // Update user profile role to match the selected tab
+        await supabase.from('profiles').upsert({
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.user_metadata?.name || data.user.email?.split('@')[0] || 'User',
+          role: selectedTab
+        })
       }
 
       addToast(`Successfully logged in as ${selectedTab}!`, 'success')
