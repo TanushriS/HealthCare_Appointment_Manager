@@ -84,38 +84,92 @@ export async function syncAppointmentToCalendar(action, appointmentId) {
  */
 async function syncMockCalendarEvent(action, appointmentId) {
   try {
-    const appointments = JSON.parse(localStorage.getItem('appointments') || '[]')
-    const profiles = JSON.parse(localStorage.getItem('profiles') || '[]')
-    const app = appointments.find(a => a.id === appointmentId)
+    let app, patient, doctor, accessToken;
+    const isMock = isLocalMockMode()
 
-    if (!app) throw new Error("Appointment not found")
+    if (isMock) {
+      const appointments = JSON.parse(localStorage.getItem('appointments') || '[]')
+      const profiles = JSON.parse(localStorage.getItem('profiles') || '[]')
+      app = appointments.find(a => a.id === appointmentId)
 
-    const patient = profiles.find(p => p.id === app.patient_id)
-    const doctor = profiles.find(p => p.id === app.doctor_id)
+      if (!app) throw new Error("Appointment not found")
 
-    // Fetch token for the logged-in user
-    const userSession = JSON.parse(localStorage.getItem('mc_session'))
-    if (!userSession) throw new Error("User session not found")
+      patient = profiles.find(p => p.id === app.patient_id)
+      doctor = profiles.find(p => p.id === app.doctor_id)
 
-    const tokens = JSON.parse(localStorage.getItem('user_oauth_tokens') || '[]')
-    const tokenData = tokens.find(t => t.user_id === userSession.id)
+      // Fetch token for the logged-in user
+      const userSession = JSON.parse(localStorage.getItem('mc_session'))
+      if (!userSession) throw new Error("User session not found")
 
-    if (!tokenData) {
-      throw new Error("Google Calendar account is not linked")
+      const tokens = JSON.parse(localStorage.getItem('user_oauth_tokens') || '[]')
+      const tokenData = tokens.find(t => t.user_id === userSession.id)
+
+      if (!tokenData) {
+        throw new Error("Google Calendar account is not linked")
+      }
+      accessToken = tokenData.access_token
+    } else {
+      // 1. Fetch appointment details from Supabase
+      const { data: dbApp, error: appErr } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('id', appointmentId)
+        .single()
+
+      if (appErr || !dbApp) throw new Error("Appointment not found in database: " + (appErr?.message || ""))
+      app = dbApp
+
+      // 2. Fetch patient & doctor profile details
+      const { data: dbPatient } = await supabase.from('profiles').select('*').eq('id', app.patient_id).single()
+      const { data: dbDoctor } = await supabase.from('profiles').select('*').eq('id', app.doctor_id).single()
+      patient = dbPatient
+      doctor = dbDoctor
+
+      // 3. Fetch current user session to query OAuth token
+      const { data: { user: sessionUser } } = await supabase.auth.getUser()
+      if (!sessionUser) throw new Error("User session not found")
+
+      const { data: tokenData, error: tokErr } = await supabase
+        .from('user_oauth_tokens')
+        .select('access_token')
+        .eq('user_id', sessionUser.id)
+        .single()
+
+      if (tokErr || !tokenData) {
+        throw new Error("Google Calendar account is not linked in database")
+      }
+      accessToken = tokenData.access_token
     }
 
-    const accessToken = tokenData.access_token
-    const calendarEvents = JSON.parse(localStorage.getItem('calendar_events') || '[]')
-    const calEvent = calendarEvents.find(c => c.appointment_id === appointmentId) || {
-      appointment_id: appointmentId,
-      patient_event_id: null,
-      doctor_event_id: null,
-      sync_status: 'pending'
+    let calEvent;
+    let eventId;
+
+    if (isMock) {
+      const calendarEvents = JSON.parse(localStorage.getItem('calendar_events') || '[]')
+      calEvent = calendarEvents.find(c => c.appointment_id === appointmentId) || {
+        appointment_id: appointmentId,
+        patient_event_id: null,
+        doctor_event_id: null,
+        sync_status: 'pending'
+      }
+      eventId = calEvent.patient_event_id || calEvent.doctor_event_id
+    } else {
+      const { data: dbCalEvent } = await supabase
+        .from('calendar_events')
+        .select('*')
+        .eq('appointment_id', appointmentId)
+        .maybeSingle()
+
+      calEvent = dbCalEvent || {
+        appointment_id: appointmentId,
+        patient_event_id: null,
+        doctor_event_id: null,
+        sync_status: 'pending'
+      }
+      eventId = calEvent.patient_event_id || calEvent.doctor_event_id
     }
 
-    // Since in mock mode we sync to the logged-in user's calendar, we store the created event ID
-    let eventId = calEvent.patient_event_id || calEvent.doctor_event_id
-
+    // Since in mock/client fallback mode we sync to the logged-in user's calendar, we store the created event ID
     const eventDetails = {
       summary: `MediCare Connect Appointment: Dr. ${doctor?.name || 'Doctor'} & ${patient?.name || 'Patient'}`,
       description: `Consultation booked on MediCare Connect.\nPatient: ${patient?.name}\nDoctor: Dr. ${doctor?.name}\nStatus: ${app.status}`,
@@ -168,11 +222,19 @@ async function syncMockCalendarEvent(action, appointmentId) {
       calEvent.error_message = null
     }
 
-    // Save back to mock DB
-    const idx = calendarEvents.findIndex(c => c.appointment_id === appointmentId)
-    if (idx > -1) calendarEvents[idx] = calEvent
-    else calendarEvents.push(calEvent)
-    localStorage.setItem('calendar_events', JSON.stringify(calendarEvents))
+    // Save back to DB / local mock DB
+    if (isMock) {
+      const calendarEvents = JSON.parse(localStorage.getItem('calendar_events') || '[]')
+      const idx = calendarEvents.findIndex(c => c.appointment_id === appointmentId)
+      if (idx > -1) calendarEvents[idx] = calEvent
+      else calendarEvents.push(calEvent)
+      localStorage.setItem('calendar_events', JSON.stringify(calendarEvents))
+    } else {
+      const { error: upsertErr } = await supabase
+        .from('calendar_events')
+        .upsert(calEvent)
+      if (upsertErr) console.warn("Failed to save calendar event sync state to database:", upsertErr.message)
+    }
 
     return { success: true }
   } catch (err) {
