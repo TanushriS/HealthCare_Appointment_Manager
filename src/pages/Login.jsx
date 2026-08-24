@@ -3,23 +3,15 @@ import { supabase } from '../services/supabase'
 
 export default function Login({ onLoginSuccess, addToast, navigateToRegister }) {
   const [selectedTab, setSelectedTab] = useState('patient') // 'patient' | 'doctor' | 'admin'
-  const [email, setEmail] = useState('patient@example.com')
-  const [password, setPassword] = useState('patient123')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
   // Quick fill helper for roles
   const handleTabChange = (role) => {
     setSelectedTab(role)
-    if (role === 'admin') {
-      setEmail('admin@example.com')
-      setPassword('admin123')
-    } else if (role === 'doctor') {
-      setEmail('doctor@example.com')
-      setPassword('doctor123')
-    } else {
-      setEmail('patient@example.com')
-      setPassword('patient123')
-    }
+    setEmail('')
+    setPassword('')
   }
 
   const handleSubmit = async (e) => {
@@ -150,6 +142,26 @@ export default function Login({ onLoginSuccess, addToast, navigateToRegister }) 
               disabled={loading}
               required
             />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-8px', marginBottom: '16px' }}>
+            <span 
+              style={{ color: 'var(--primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '500' }}
+              onClick={() => {
+                if (selectedTab === 'admin') {
+                  setEmail('admin@example.com')
+                  setPassword('admin123')
+                } else if (selectedTab === 'doctor') {
+                  setEmail('doctor@example.com')
+                  setPassword('doctor123')
+                } else {
+                  setEmail('patient@example.com')
+                  setPassword('patient123')
+                }
+              }}
+            >
+              💡 Autofill demo credentials
+            </span>
           </div>
 
           <button type="submit" className="btn btn-primary btn-full" style={{ marginTop: '8px' }} disabled={loading}>
