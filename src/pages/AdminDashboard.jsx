@@ -298,6 +298,34 @@ export default function AdminDashboard({ addToast, activeTab: propActiveTab, set
     }
   }
 
+  const handleDeleteDoctor = async (doctorId) => {
+    if (!window.confirm("Are you sure you want to permanently delete this doctor's account, profile, and credentials? This cannot be undone.")) {
+      return
+    }
+
+    try {
+      try {
+        const { data, error } = await supabase.functions.invoke('manage-doctors', {
+          body: {
+            action: 'delete',
+            doctorId
+          }
+        })
+        if (error || !data?.success) throw error || new Error(data?.error || "Delete failed")
+      } catch (efErr) {
+        console.warn("Edge function manage-doctors unavailable, using direct DB deletion fallback:", efErr.message)
+        const { error: dpErr } = await supabase.from('doctor_profiles').delete().eq('user_id', doctorId)
+        if (dpErr) throw dpErr
+        const { error: pErr } = await supabase.from('profiles').delete().eq('id', doctorId)
+        if (pErr) throw pErr
+      }
+      addToast('Doctor permanently deleted successfully', 'success')
+      fetchDoctors()
+    } catch (err) {
+      addToast(err.message, 'error')
+    }
+  }
+
   const handleSaveLeave = async (e) => {
     e.preventDefault()
     if (!leaveDoctorId || !leaveDate) {
@@ -460,6 +488,13 @@ export default function AdminDashboard({ addToast, activeTab: propActiveTab, set
                           onClick={() => handleToggleActive(doc.user_id, doc.active)}
                         >
                           {doc.active ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button 
+                          className="btn btn-danger"
+                          style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                          onClick={() => handleDeleteDoctor(doc.user_id)}
+                        >
+                          🗑️ Delete
                         </button>
                       </div>
                     </td>

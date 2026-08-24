@@ -163,6 +163,45 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       })
 
+    } else if (action === 'delete') {
+      if (!doctorId) {
+        return new Response(JSON.stringify({ error: "Missing doctorId" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        })
+      }
+
+      // Delete from doctor_profiles table
+      const { error: dpErr } = await supabase
+        .from('doctor_profiles')
+        .delete()
+        .eq('user_id', doctorId)
+
+      if (dpErr) {
+        throw new Error("Deleting doctor profile failed: " + dpErr.message)
+      }
+
+      // Delete from profiles table
+      const { error: pErr } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', doctorId)
+
+      if (pErr) {
+        throw new Error("Deleting profiles record failed: " + pErr.message)
+      }
+
+      // Delete user account from Supabase Auth permanently
+      const { error: authErr } = await supabase.auth.admin.deleteUser(doctorId)
+
+      if (authErr) {
+        throw new Error("Deleting auth user failed: " + authErr.message)
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      })
+
     } else {
       return new Response(JSON.stringify({ error: "Invalid action" }), {
         status: 400,

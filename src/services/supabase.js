@@ -547,6 +547,15 @@ function createMockSupabaseClient() {
             }
             localStorage.setItem('doctor_profiles', JSON.stringify(doctors))
             return { data: { success: true }, error: null }
+          } else if (action === 'delete') {
+            const cleanDoctors = doctors.filter(d => d.user_id !== doctorId)
+            const cleanProfiles = profiles.filter(p => p.id !== doctorId)
+            const cleanUsers = users.filter(u => u.id !== doctorId)
+
+            localStorage.setItem('doctor_profiles', JSON.stringify(cleanDoctors))
+            localStorage.setItem('profiles', JSON.stringify(cleanProfiles))
+            localStorage.setItem('mc_users', JSON.stringify(cleanUsers))
+            return { data: { success: true }, error: null }
           }
         }
 
