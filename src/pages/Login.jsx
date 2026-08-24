@@ -144,18 +144,13 @@ export default function Login({ onLoginSuccess, addToast, navigateToRegister }) 
             />
           </div>
 
-          {selectedTab !== 'patient' && (
+          {selectedTab === 'admin' && (
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-8px', marginBottom: '16px' }}>
               <span 
                 style={{ color: 'var(--primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '500' }}
                 onClick={() => {
-                  if (selectedTab === 'admin') {
-                    setEmail('admin@example.com')
-                    setPassword('admin123')
-                  } else if (selectedTab === 'doctor') {
-                    setEmail('doctor@example.com')
-                    setPassword('doctor123')
-                  }
+                  setEmail('admin@example.com')
+                  setPassword('admin123')
                 }}
               >
                 💡 Autofill demo credentials
