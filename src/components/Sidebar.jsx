@@ -35,10 +35,10 @@ export default function Sidebar({ user, profile, activeTab, setActiveTab, onLogo
       </div>
 
       <div style={{ marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid var(--border-color)' }}>
-        <p style={{ fontWeight: '600', fontSize: '0.95rem', color: '#fff' }}>{profile.name || 'User'}</p>
-        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '8px' }}>{profile.email}</p>
+        <p style={{ fontWeight: '600', fontSize: '0.95rem', color: '#fff' }}>{profile?.name || 'User'}</p>
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '8px' }}>{profile?.email || ''}</p>
         <span className={`badge badge-confirmed`} style={{ fontSize: '0.65rem', padding: '2px 8px' }}>
-          {profile.role.toUpperCase()}
+          {(profile?.role || 'user').toUpperCase()}
         </span>
       </div>
 

@@ -346,10 +346,11 @@ export default function AdminDashboard({ addToast, activeTab: propActiveTab, set
     }
   }
 
-  const filteredAppointments = appointments.filter(app => {
-    if (filterDoc && !app.doctor?.name.toLowerCase().includes(filterDoc.toLowerCase())) return false
-    if (filterPatient && !app.patient?.name.toLowerCase().includes(filterPatient.toLowerCase())) return false
-    if (filterDate && !app.slot_start.startsWith(filterDate)) return false
+  const filteredAppointments = (appointments || []).filter(app => {
+    if (!app) return false
+    if (filterDoc && !app.doctor?.name?.toLowerCase().includes(filterDoc.toLowerCase())) return false
+    if (filterPatient && !app.patient?.name?.toLowerCase().includes(filterPatient.toLowerCase())) return false
+    if (filterDate && !(app.slot_start && String(app.slot_start).startsWith(filterDate))) return false
     if (filterStatus && app.status !== filterStatus) return false
     return true
   })
@@ -395,7 +396,7 @@ export default function AdminDashboard({ addToast, activeTab: propActiveTab, set
           onClick={() => setActiveTab('notifications')}
           style={{ borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}
         >
-          Notifications Logs
+          Notifications Logs ({notifications.length})
         </button>
       </div>
 
@@ -414,42 +415,57 @@ export default function AdminDashboard({ addToast, activeTab: propActiveTab, set
               </tr>
             </thead>
             <tbody>
-              {doctors.map((doc) => (
-                <tr key={doc.user_id}>
-                  <td>
-                    <div style={{ fontWeight: '600' }}>{doc.profile?.name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{doc.profile?.email}</div>
-                  </td>
-                  <td>{doc.specialisation}</td>
-                  <td>{doc.slot_duration} mins</td>
-                  <td>
-                    <div style={{ fontSize: '0.85rem' }}>
-                      {doc.working_hours && typeof doc.working_hours === 'object' && Object.keys(doc.working_hours).length > 0
-                        ? Object.keys(doc.working_hours).map(day => day.substring(0,3)).join(', ').toUpperCase()
-                        : 'Not configured'}
-                    </div>
-                  </td>
-                  <td>
-                    <span className={`badge ${doc.active ? 'badge-completed' : 'badge-cancelled'}`}>
-                      {doc.active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => handleOpenDoctorEdit(doc)}>
-                        ✏️ Edit
-                      </button>
-                      <button 
-                        className={`btn ${doc.active ? 'btn-danger' : 'btn-success'}`}
-                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                        onClick={() => handleToggleActive(doc.user_id, doc.active)}
-                      >
-                        {doc.active ? 'Deactivate' : 'Activate'}
-                      </button>
-                    </div>
+              {doctors.length === 0 ? (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                    No doctors found. Click <strong>Provision Doctor</strong> above to add one.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                doctors.map((doc) => (
+                  <tr key={doc.user_id || Math.random()}>
+                    <td>
+                      <div style={{ fontWeight: '600' }}>{doc.profile?.name || 'Doctor'}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{doc.profile?.email || ''}</div>
+                    </td>
+                    <td>{doc.specialisation || 'General'}</td>
+                    <td>{doc.slot_duration || 30} mins</td>
+                    <td>
+                      <div style={{ fontSize: '0.85rem' }}>
+                        {(() => {
+                          let hours = doc.working_hours
+                          if (typeof hours === 'string') {
+                            try { hours = JSON.parse(hours) } catch (e) { hours = null }
+                          }
+                          if (hours && typeof hours === 'object' && Object.keys(hours).length > 0) {
+                            return Object.keys(hours).map(day => String(day).substring(0, 3)).join(', ').toUpperCase()
+                          }
+                          return 'Not configured'
+                        })()}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`badge ${doc.active ? 'badge-completed' : 'badge-cancelled'}`}>
+                        {doc.active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => handleOpenDoctorEdit(doc)}>
+                          ✏️ Edit
+                        </button>
+                        <button 
+                          className={`btn ${doc.active ? 'btn-danger' : 'btn-success'}`}
+                          style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                          onClick={() => handleToggleActive(doc.user_id, doc.active)}
+                        >
+                          {doc.active ? 'Deactivate' : 'Activate'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -495,26 +511,38 @@ export default function AdminDashboard({ addToast, activeTab: propActiveTab, set
                 </tr>
               </thead>
               <tbody>
-                {filteredAppointments.map((app) => (
-                  <tr key={app.id}>
-                    <td>
-                      <div style={{ fontWeight: '600' }}>{new Date(app.slot_start).toLocaleDateString()}</div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        {new Date(app.slot_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(app.slot_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: '500' }}>{app.patient?.name}</div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{app.patient?.email}</div>
-                    </td>
-                    <td>Dr. {app.doctor?.name}</td>
-                    <td>
-                      <span className={`badge badge-${app.status}`}>
-                        {app.status}
-                      </span>
+                {filteredAppointments.length === 0 ? (
+                  <tr>
+                    <td colSpan="4" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                      No appointments found.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredAppointments.map((app) => (
+                    <tr key={app.id || Math.random()}>
+                      <td>
+                        <div style={{ fontWeight: '600' }}>
+                          {app.slot_start ? new Date(app.slot_start).toLocaleDateString() : 'N/A'}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          {app.slot_start && app.slot_end 
+                            ? `${new Date(app.slot_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(app.slot_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                            : 'N/A'}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: '500' }}>{app.patient?.name || 'Patient'}</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{app.patient?.email || ''}</div>
+                      </td>
+                      <td>Dr. {app.doctor?.name || 'Doctor'}</td>
+                      <td>
+                        <span className={`badge badge-${app.status || 'confirmed'}`}>
+                          {app.status || 'confirmed'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -537,21 +565,29 @@ export default function AdminDashboard({ addToast, activeTab: propActiveTab, set
               </tr>
             </thead>
             <tbody>
-              {notifications.map((n) => (
-                <tr key={n.id}>
-                  <td>{n.recipient_email}</td>
-                  <td><span className="badge badge-confirmed" style={{ fontSize: '0.65rem' }}>{n.type}</span></td>
-                  <td>{n.subject}</td>
-                  <td>{n.channel}</td>
-                  <td>
-                    <span className={`badge ${n.status === 'sent' ? 'badge-completed' : n.status === 'failed' ? 'badge-cancelled' : 'badge-held'}`}>
-                      {n.status}
-                    </span>
+              {notifications.length === 0 ? (
+                <tr>
+                  <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                    No notifications logged yet.
                   </td>
-                  <td>{n.retry_count} / 5</td>
-                  <td>{new Date(n.created_at).toLocaleString()}</td>
                 </tr>
-              ))}
+              ) : (
+                notifications.map((n) => (
+                  <tr key={n.id || Math.random()}>
+                    <td>{n.recipient_email || 'N/A'}</td>
+                    <td><span className="badge badge-confirmed" style={{ fontSize: '0.65rem' }}>{n.type || 'email'}</span></td>
+                    <td>{n.subject || 'No Subject'}</td>
+                    <td>{n.channel || 'email'}</td>
+                    <td>
+                      <span className={`badge ${n.status === 'sent' ? 'badge-completed' : n.status === 'failed' ? 'badge-cancelled' : 'badge-held'}`}>
+                        {n.status || 'pending'}
+                      </span>
+                    </td>
+                    <td>{n.retry_count ?? 0} / 5</td>
+                    <td>{n.created_at ? new Date(n.created_at).toLocaleString() : 'N/A'}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
