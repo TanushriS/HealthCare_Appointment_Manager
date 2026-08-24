@@ -364,9 +364,24 @@ export default function AdminDashboard({ addToast, activeTab: propActiveTab, set
   const handleTriggerBackgroundJobs = async () => {
     try {
       addToast('Triggering background job...', 'info')
-      const { data, error } = await supabase.functions.invoke('background-jobs')
-      if (error) throw error
-      addToast(`Cron completed. Released Holds: ${data?.results?.expiredHolds?.count || 0}, Retries: ${data?.results?.notificationRetries?.retried || 0}`, 'success')
+      try {
+        const { data, error } = await supabase.functions.invoke('background-jobs')
+        if (error) throw error
+        addToast(`Cron completed. Released Holds: ${data?.results?.expiredHolds?.count || 0}, Retries: ${data?.results?.notificationRetries?.retried || 0}`, 'success')
+      } catch (efErr) {
+        console.warn("Edge function background-jobs unavailable, running local fallback database cleanup:", efErr.message)
+        // Fallback: Release expired holds directly in the database
+        const nowStr = new Date().toISOString()
+        const { data: updated, error: updErr } = await supabase
+          .from('appointments')
+          .update({ status: 'cancelled' })
+          .eq('status', 'held')
+          .lt('held_until', nowStr)
+          .select()
+        
+        if (updErr) throw updErr
+        addToast(`Local cleanup completed. Released ${updated?.length || 0} expired holds.`, 'success')
+      }
       fetchAppointments()
       fetchNotifications()
     } catch (err) {
