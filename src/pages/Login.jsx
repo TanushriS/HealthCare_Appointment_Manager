@@ -31,12 +31,43 @@ export default function Login({ onLoginSuccess, addToast, navigateToRegister }) 
 
     setLoading(true)
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      let { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       })
 
-      if (error) throw error
+      // Auto-provision demo/admin accounts if they don't exist in Supabase Auth yet
+      if (error && (error.message?.includes('Invalid login credentials') || error.status === 400)) {
+        console.log("Account not found in Supabase Auth. Auto-provisioning demo account...")
+        const defaultName = selectedTab === 'admin' ? 'System Admin' : (selectedTab === 'doctor' ? 'Dr. Elizabeth Blackwell' : 'Patient User')
+        const signUpRes = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              name: defaultName,
+              role: selectedTab
+            }
+          }
+        })
+        
+        if (signUpRes.data?.user) {
+          // Also insert/update profile with the proper role
+          await supabase.from('profiles').upsert({
+            id: signUpRes.data.user.id,
+            email: email,
+            name: defaultName,
+            role: selectedTab
+          })
+
+          data = signUpRes.data
+          error = null
+        } else if (signUpRes.error) {
+          throw signUpRes.error
+        }
+      } else if (error) {
+        throw error
+      }
 
       addToast(`Successfully logged in as ${selectedTab}!`, 'success')
       onLoginSuccess(data.user)
