@@ -3,8 +3,11 @@ import { supabase } from '../services/supabase'
 import { connectGoogleCalendar, syncAppointmentToCalendar } from '../services/googleCalendar'
 import Modal from '../components/Modal'
 
-export default function PatientDashboard({ user, addToast }) {
-  const [activeTab, setActiveTab] = useState('book')
+export default function PatientDashboard({ user, addToast, activeTab: propActiveTab, setActiveTab: propSetActiveTab }) {
+  const [localActiveTab, setLocalActiveTab] = useState('book')
+  const activeTab = propActiveTab || localActiveTab
+  const setActiveTab = propSetActiveTab || setLocalActiveTab
+
   const [doctors, setDoctors] = useState([])
   const [specialisations, setSpecialisations] = useState([])
   const [selectedSpec, setSelectedSpec] = useState('')
@@ -46,42 +49,85 @@ export default function PatientDashboard({ user, addToast }) {
       return
     }
     const interval = setInterval(() => {
-      setHoldTimer(prev => prev - 1)
+      setHoldTimer((prev) => prev - 1)
     }, 1000)
     return () => clearInterval(interval)
   }, [holdTimer, heldAppointmentId])
 
   const fetchDoctors = async () => {
-    const { data, error } = await supabase
-      .from('doctor_profiles')
-      .select(`
-        user_id, specialisation, slot_duration, active,
-        profile:profiles!doctor_profiles_user_id_fkey(name, email)
-      `)
-      .eq('active', true)
+    try {
+      const { data, error } = await supabase
+        .from('doctor_profiles')
+        .select(`
+          user_id, specialisation, slot_duration, active, working_hours,
+          profile:profiles!doctor_profiles_user_id_fkey(name, email)
+        `)
+        .eq('active', true)
 
-    if (!error && data) {
-      setDoctors(data)
-      const specs = [...new Set(data.map(d => d.specialisation))]
-      setSpecialisations(specs)
+      if (error) {
+        const { data: fbData, error: fbErr } = await supabase
+          .from('doctor_profiles')
+          .select(`
+            user_id, specialisation, slot_duration, active, working_hours,
+            profile:profiles(name, email)
+          `)
+          .eq('active', true)
+        if (!fbErr && fbData) {
+          setDoctors(fbData)
+          const specs = [...new Set(fbData.map(d => d.specialisation).filter(Boolean))]
+          setSpecialisations(specs)
+          return
+        }
+        console.error('Error fetching doctors:', error || fbErr)
+      } else if (data) {
+        setDoctors(data)
+        const specs = [...new Set(data.map(d => d.specialisation).filter(Boolean))]
+        setSpecialisations(specs)
+      }
+    } catch (err) {
+      console.error('fetchDoctors exception:', err)
     }
   }
 
   const fetchMyAppointments = async () => {
-    const { data, error } = await supabase
-      .from('appointments')
-      .select(`
-        id, slot_start, slot_end, status, created_at,
-        doctor:profiles!appointments_doctor_id_fkey(name),
-        symptom_forms(symptoms_text, severity, duration),
-        pre_visit_summaries(urgency_level, chief_complaint, suggested_questions),
-        visit_notes(clinical_notes, prescription),
-        post_visit_summaries(summary_text, medication_schedule, follow_up_steps, status)
-      `)
-      .eq('patient_id', user.id)
-      .order('slot_start', { ascending: false })
+    try {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(`
+          id, slot_start, slot_end, status, created_at,
+          doctor:profiles!appointments_doctor_id_fkey(name),
+          symptom_forms(symptoms_text, severity, duration),
+          pre_visit_summaries(urgency_level, chief_complaint, suggested_questions),
+          visit_notes(clinical_notes, prescription),
+          post_visit_summaries(summary_text, medication_schedule, follow_up_steps, status)
+        `)
+        .eq('patient_id', user.id)
+        .order('slot_start', { ascending: false })
 
-    if (!error) setMyAppointments(data || [])
+      if (error) {
+        const { data: fbData, error: fbErr } = await supabase
+          .from('appointments')
+          .select(`
+            id, slot_start, slot_end, status, created_at,
+            doctor:profiles(name),
+            symptom_forms(symptoms_text, severity, duration),
+            pre_visit_summaries(urgency_level, chief_complaint, suggested_questions),
+            visit_notes(clinical_notes, prescription),
+            post_visit_summaries(summary_text, medication_schedule, follow_up_steps, status)
+          `)
+          .eq('patient_id', user.id)
+          .order('slot_start', { ascending: false })
+        if (!fbErr && fbData) {
+          setMyAppointments(fbData)
+          return
+        }
+        console.error('Error fetching patient appointments:', error || fbErr)
+      } else {
+        setMyAppointments(data || [])
+      }
+    } catch (err) {
+      console.error('fetchMyAppointments exception:', err)
+    }
   }
 
   const checkCalendarSync = async () => {

@@ -3,8 +3,11 @@ import { supabase } from '../services/supabase'
 import { connectGoogleCalendar, syncAppointmentToCalendar } from '../services/googleCalendar'
 import Modal from '../components/Modal'
 
-export default function DoctorDashboard({ user, addToast }) {
-  const [activeTab, setActiveTab] = useState('schedule')
+export default function DoctorDashboard({ user, addToast, activeTab: propActiveTab, setActiveTab: propSetActiveTab }) {
+  const [localActiveTab, setLocalActiveTab] = useState('schedule')
+  const activeTab = propActiveTab || localActiveTab
+  const setActiveTab = propSetActiveTab || setLocalActiveTab
+
   const [appointments, setAppointments] = useState([])
   const [leaves, setLeaves] = useState([])
   const [calendarSyncStatus, setCalendarSyncStatus] = useState(null)
@@ -28,23 +31,42 @@ export default function DoctorDashboard({ user, addToast }) {
   }, [])
 
   const fetchAppointments = async () => {
-    // Fetch appointments assigned to the doctor, including symptom forms and pre-visit AI summaries
-    const { data, error } = await supabase
-      .from('appointments')
-      .select(`
-        id, slot_start, slot_end, status, patient_id,
-        patient:profiles!appointments_patient_id_fkey(name, email, phone),
-        symptom_forms(symptoms_text, severity, duration),
-        pre_visit_summaries(urgency_level, chief_complaint, suggested_questions, status),
-        post_visit_summaries(summary_text, status)
-      `)
-      .eq('doctor_id', user.id)
-      .order('slot_start', { ascending: true })
+    try {
+      // Fetch appointments assigned to the doctor, including symptom forms and pre-visit AI summaries
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(`
+          id, slot_start, slot_end, status, patient_id,
+          patient:profiles!appointments_patient_id_fkey(name, email, phone),
+          symptom_forms(symptoms_text, severity, duration),
+          pre_visit_summaries(urgency_level, chief_complaint, suggested_questions, status),
+          post_visit_summaries(summary_text, status)
+        `)
+        .eq('doctor_id', user.id)
+        .order('slot_start', { ascending: true })
 
-    if (error) {
-      console.error(error)
-    } else {
-      setAppointments(data || [])
+      if (error) {
+        const { data: fbData, error: fbErr } = await supabase
+          .from('appointments')
+          .select(`
+            id, slot_start, slot_end, status, patient_id,
+            patient:profiles(name, email, phone),
+            symptom_forms(symptoms_text, severity, duration),
+            pre_visit_summaries(urgency_level, chief_complaint, suggested_questions, status),
+            post_visit_summaries(summary_text, status)
+          `)
+          .eq('doctor_id', user.id)
+          .order('slot_start', { ascending: true })
+        if (!fbErr && fbData) {
+          setAppointments(fbData)
+          return
+        }
+        console.error('Error fetching doctor appointments:', error || fbErr)
+      } else {
+        setAppointments(data || [])
+      }
+    } catch (err) {
+      console.error('fetchAppointments exception:', err)
     }
   }
 

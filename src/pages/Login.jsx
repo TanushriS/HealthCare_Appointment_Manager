@@ -10,6 +10,16 @@ export default function Login({ onLoginSuccess, addToast, navigateToRegister }) 
   // Quick fill helper for roles
   const handleTabChange = (role) => {
     setSelectedTab(role)
+    if (role === 'admin') {
+      setEmail('admin@example.com')
+      setPassword('admin123')
+    } else if (role === 'doctor') {
+      setEmail('doctor@example.com')
+      setPassword('doctor123')
+    } else {
+      setEmail('patient@example.com')
+      setPassword('patient123')
+    }
   }
 
   const handleSubmit = async (e) => {

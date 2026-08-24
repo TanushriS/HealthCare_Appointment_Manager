@@ -192,6 +192,7 @@ export default function App() {
           <AdminDashboard 
             addToast={addToast} 
             activeTab={activeTab} 
+            setActiveTab={setActiveTab}
           />
         )}
         
@@ -200,6 +201,7 @@ export default function App() {
             user={user} 
             addToast={addToast} 
             activeTab={activeTab} 
+            setActiveTab={setActiveTab}
           />
         )}
         
@@ -208,6 +210,7 @@ export default function App() {
             user={user} 
             addToast={addToast} 
             activeTab={activeTab} 
+            setActiveTab={setActiveTab}
           />
         )}
       </main>

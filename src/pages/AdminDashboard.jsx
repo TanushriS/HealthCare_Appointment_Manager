@@ -12,8 +12,11 @@ const INITIAL_WORKING_HOURS = {
   sunday: { enabled: false, start: '09:00', end: '13:00' }
 }
 
-export default function AdminDashboard({ addToast }) {
-  const [activeTab, setActiveTab] = useState('doctors')
+export default function AdminDashboard({ addToast, activeTab: propActiveTab, setActiveTab: propSetActiveTab }) {
+  const [localActiveTab, setLocalActiveTab] = useState('doctors')
+  const activeTab = propActiveTab || localActiveTab
+  const setActiveTab = propSetActiveTab || setLocalActiveTab
+
   const [doctors, setDoctors] = useState([])
   const [appointments, setAppointments] = useState([])
   const [notifications, setNotifications] = useState([])
@@ -49,34 +52,78 @@ export default function AdminDashboard({ addToast }) {
   }, [])
 
   const fetchDoctors = async () => {
-    const { data, error } = await supabase
-      .from('doctor_profiles')
-      .select(`
-        user_id, specialisation, slot_duration, active,
-        profile:profiles!doctor_profiles_user_id_fkey(name, email, phone)
-      `)
-    if (!error) setDoctors(data || [])
+    try {
+      const { data, error } = await supabase
+        .from('doctor_profiles')
+        .select(`
+          user_id, specialisation, slot_duration, active, working_hours,
+          profile:profiles!doctor_profiles_user_id_fkey(name, email, phone)
+        `)
+      if (error) {
+        // Fallback without explicit foreign key constraint name
+        const { data: fbData, error: fbError } = await supabase
+          .from('doctor_profiles')
+          .select(`
+            user_id, specialisation, slot_duration, active, working_hours,
+            profile:profiles(name, email, phone)
+          `)
+        if (!fbError && fbData) {
+          setDoctors(fbData)
+          return
+        }
+        console.error("Error fetching doctors:", error || fbError)
+      } else {
+        setDoctors(data || [])
+      }
+    } catch (err) {
+      console.error("fetchDoctors exception:", err)
+    }
   }
 
   const fetchAppointments = async () => {
-    const { data, error } = await supabase
-      .from('appointments')
-      .select(`
-        id, slot_start, slot_end, status,
-        patient:profiles!appointments_patient_id_fkey(name, email),
-        doctor:profiles!appointments_doctor_id_fkey(name)
-      `)
-      .order('slot_start', { ascending: false })
-    if (!error) setAppointments(data || [])
+    try {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(`
+          id, slot_start, slot_end, status,
+          patient:profiles!appointments_patient_id_fkey(name, email),
+          doctor:profiles!appointments_doctor_id_fkey(name)
+        `)
+        .order('slot_start', { ascending: false })
+      if (error) {
+        // Fallback without explicit foreign key constraint names
+        const { data: fbData, error: fbError } = await supabase
+          .from('appointments')
+          .select(`
+            id, slot_start, slot_end, status,
+            patient:profiles(name, email),
+            doctor:profiles(name)
+          `)
+          .order('slot_start', { ascending: false })
+        if (!fbError && fbData) {
+          setAppointments(fbData)
+          return
+        }
+        console.error("Error fetching appointments:", error || fbError)
+      } else {
+        setAppointments(data || [])
+      }
+    } catch (err) {
+      console.error("fetchAppointments exception:", err)
+    }
   }
 
   const fetchNotifications = async () => {
-    const { data, error } = await supabase
-      .from('notifications_log')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(100)
-    if (!error) setNotifications(data || [])
+    try {
+      const { data, error } = await supabase
+        .from('notifications_log')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100)
+      if (!error) setNotifications(data || [])
+    } catch (err) {
+      console.error("fetchNotifications exception:", err)
+    }
   }
 
   const handleOpenDoctorCreate = () => {
@@ -93,21 +140,22 @@ export default function AdminDashboard({ addToast }) {
 
   const handleOpenDoctorEdit = (doc) => {
     setEditingDoctor(doc)
-    setDocName(doc.profile.name)
-    setDocEmail(doc.profile.email)
-    setDocPassword('') // Keep password blank unless changing (cannot change easily via update currently)
-    setDocPhone(doc.profile.phone || '')
-    setDocSpec(doc.specialisation)
-    setDocDuration(doc.slot_duration)
+    setDocName(doc.profile?.name || '')
+    setDocEmail(doc.profile?.email || '')
+    setDocPassword('') // Keep password blank unless changing
+    setDocPhone(doc.profile?.phone || '')
+    setDocSpec(doc.specialisation || '')
+    setDocDuration(doc.slot_duration || 30)
     
-    // Parse working hours
+    // Parse working hours safely
     const parsedHours = {}
+    const docHours = (doc.working_hours && typeof doc.working_hours === 'object') ? doc.working_hours : {}
     Object.keys(INITIAL_WORKING_HOURS).forEach(day => {
-      if (doc.working_hours[day]) {
+      if (docHours[day]) {
         parsedHours[day] = {
           enabled: true,
-          start: doc.working_hours[day].start,
-          end: doc.working_hours[day].end
+          start: docHours[day].start || '09:00',
+          end: docHours[day].end || '17:00'
         }
       } else {
         parsedHours[day] = { enabled: false, start: '09:00', end: '17:00' }
@@ -376,7 +424,9 @@ export default function AdminDashboard({ addToast }) {
                   <td>{doc.slot_duration} mins</td>
                   <td>
                     <div style={{ fontSize: '0.85rem' }}>
-                      {Object.keys(doc.working_hours).map(day => day.substring(0,3)).join(', ').toUpperCase()}
+                      {doc.working_hours && typeof doc.working_hours === 'object' && Object.keys(doc.working_hours).length > 0
+                        ? Object.keys(doc.working_hours).map(day => day.substring(0,3)).join(', ').toUpperCase()
+                        : 'Not configured'}
                     </div>
                   </td>
                   <td>
