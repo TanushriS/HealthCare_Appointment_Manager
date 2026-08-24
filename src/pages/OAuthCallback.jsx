@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { exchangeOAuthCode } from '../services/googleCalendar'
+import { supabase } from '../services/supabase'
 
 export default function OAuthCallback({ addToast, onComplete }) {
   const [status, setStatus] = useState('processing') // 'processing' | 'success' | 'failed'
