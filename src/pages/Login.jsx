@@ -144,25 +144,24 @@ export default function Login({ onLoginSuccess, addToast, navigateToRegister }) 
             />
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-8px', marginBottom: '16px' }}>
-            <span 
-              style={{ color: 'var(--primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '500' }}
-              onClick={() => {
-                if (selectedTab === 'admin') {
-                  setEmail('admin@example.com')
-                  setPassword('admin123')
-                } else if (selectedTab === 'doctor') {
-                  setEmail('doctor@example.com')
-                  setPassword('doctor123')
-                } else {
-                  setEmail('patient@example.com')
-                  setPassword('patient123')
-                }
-              }}
-            >
-              💡 Autofill demo credentials
-            </span>
-          </div>
+          {selectedTab !== 'patient' && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-8px', marginBottom: '16px' }}>
+              <span 
+                style={{ color: 'var(--primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '500' }}
+                onClick={() => {
+                  if (selectedTab === 'admin') {
+                    setEmail('admin@example.com')
+                    setPassword('admin123')
+                  } else if (selectedTab === 'doctor') {
+                    setEmail('doctor@example.com')
+                    setPassword('doctor123')
+                  }
+                }}
+              >
+                💡 Autofill demo credentials
+              </span>
+            </div>
+          )}
 
           <button type="submit" className="btn btn-primary btn-full" style={{ marginTop: '8px' }} disabled={loading}>
             {loading ? 'Logging in...' : `Log In as ${selectedTab.charAt(0).toUpperCase() + selectedTab.slice(1)}`}
