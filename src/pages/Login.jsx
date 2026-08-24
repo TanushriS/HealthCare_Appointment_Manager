@@ -39,13 +39,35 @@ export default function Login({ onLoginSuccess, addToast, navigateToRegister }) 
       if (error) throw error
 
       if (data?.user) {
-        // Update user profile role to match the selected tab
-        await supabase.from('profiles').upsert({
-          id: data.user.id,
-          email: data.user.email,
-          name: data.user.user_metadata?.name || data.user.email?.split('@')[0] || 'User',
-          role: selectedTab
-        })
+        // Fetch user's actual role from the database profiles
+        const { data: dbProfile, error: pErr } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .maybeSingle()
+
+        if (pErr) throw pErr
+
+        let finalRole = dbProfile?.role
+
+        // If profile does not exist, create it with default role 'patient'
+        if (!dbProfile) {
+          finalRole = 'patient'
+          const { error: insErr } = await supabase.from('profiles').insert({
+            id: data.user.id,
+            email: data.user.email,
+            name: data.user.user_metadata?.name || data.user.email?.split('@')[0] || 'User',
+            role: 'patient'
+          })
+          if (insErr) throw insErr
+        }
+
+        // Verify if actual role matches the login tab selected
+        if (finalRole !== selectedTab) {
+          // Immediately sign out to prevent unauthorized access
+          await supabase.auth.signOut()
+          throw new Error(`Unauthorized: This account is registered as a ${finalRole}, not an ${selectedTab}.`)
+        }
       }
 
       addToast(`Successfully logged in as ${selectedTab}!`, 'success')
